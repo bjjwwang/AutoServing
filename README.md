@@ -22,7 +22,7 @@ git clone https://github.com/paddlepaddle/Serving -b $TAG
 cd Serving
 git clone https://github.com/wangjiawei04/AutoServing 
 cp -r AutoServing/* .
-bash all.sh
+bash all_centos.sh
 ```
 
 
