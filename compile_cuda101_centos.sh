@@ -2,29 +2,39 @@ set -e
 set -v
 export http_proxy=http://172.19.57.45:3128/
 export https_proxy=http://172.19.57.45:3128/
+export http_proxy=http://172.19.56.199:3128
+export https_proxy=http://172.19.56.199:3128
 version=0.0.0
 app_version=0.0.0
+#version=0.5.0
+#app_version=0.3.0
+yum install -y bzip2-devel
 cd ./python
 #python change_version.py $version
 cd ..
+rm -rf /usr/local/bin/protoc /usr/local/include/protobuf
+ln -sf /usr/lib64/libcrypto.so.10 /usr/lib64/libcrypto.so
+ln -sf /usr/lib64/libssl.so.10 /usr/lib64/libssl.so
+export LIBRARY_PATH=/usr/lib64:/usr/local/cuda/lib64/stubs
+export LD_LIBRARY_PATH=/opt/_internal/cpython-2.7.15-ucs4/lib/:/opt/_internal/cpython-3.6.0/lib/:/usr/lib64:$LD_LIBRARY_PATH
+export GOROOT=/usr/local/go
+export GOPATH=/root/gopath
+export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/python3.7/lib
-export GOPATH=$HOME/go
-export PATH=$PATH:$GOPATH/bin
-
-cpu_num=10
-
-PYTHONROOT=/usr/
+PYTHONROOT=/opt/_internal/cpython-2.7.15-ucs4/
 PYTHON_INCLUDE_DIR_2=$PYTHONROOT/include/python2.7/
 PYTHON_LIBRARY_2=$PYTHONROOT/lib/libpython2.7.so
 PYTHON_EXECUTABLE_2=$PYTHONROOT/bin/python2.7
 
-PYTHONROOT3=/usr/
+PYTHONROOT3=/opt/_internal/cpython-3.6.0/
 PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.6m/
 PYTHON_LIBRARY_3=$PYTHONROOT3/lib64/libpython3.6m.so
 PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.6m
-/usr/bin/python -m pip install grpcio==1.33.2 grpcio-tools==1.33.2 numpy bce-python-sdk  pycrypto
-/usr/bin/python3 -m pip install grpcio==1.33.2 grpcio-tools==1.33.2 numpy wheel
+$PYTHON_EXECUTABLE_2 -m pip install --upgrade pip
+$PYTHON_EXECUTABLE_2 -m pip install grpcio==1.33.2 grpcio-tools==1.33.2 numpy bce-python-sdk  pycrypto wheel
+$PYTHON_EXECUTABLE_2 -m pip install --upgrade pip
+$PYTHON_EXECUTABLE_3 -m pip install setuptools -U
+$PYTHON_EXECUTABLE_3 -m pip install grpcio grpcio-tools numpy wheel
 
 go env -w GO111MODULE=on
 go env -w GOPROXY=https://goproxy.cn,direct
@@ -33,29 +43,6 @@ go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger@v1.15.2
 go get -u github.com/golang/protobuf/protoc-gen-go@v1.4.3
 go get -u google.golang.org/grpc@v1.33.0
 
-function change_py_version(){
-py3_version=$1
-case $py3_version in
-    35)
-        PYTHONROOT3=/usr/local/python3.5
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.5m
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.5m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.5m
-        ;;
-    36)
-        PYTHONROOT3=/usr/local/python3.6
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.6m/
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.6m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.6m
-        ;;
-    37)
-        PYTHONROOT3=/usr/local/python3.7
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.7m/
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.7m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.7m
-        ;;
-esac
-}
 #git fetch upstream
 #git merge upstream/develop
 
@@ -98,9 +85,9 @@ rm -r python
 fi
 }
 
-function compile_gpu_cuda9(){
-mkdir -p build_gpu_server_cuda9
-cd build_gpu_server_cuda9
+function compile_gpu_101(){
+mkdir -p build_gpu_server_101
+cd build_gpu_server_101
 clean_whl
 cmake -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR_2 \
     -DPYTHON_LIBRARY=$PYTHON_LIBRARY_2 \
@@ -112,12 +99,12 @@ make -j$cpu_num >> compile_log
 make install >> compile_log
 cp_whl
 cd ..
-pack_gpu cuda9
+pack_gpu 101
 }
 
-function compile_gpu_cuda93(){
-mkdir -p build_gpu_server_cuda93
-cd build_gpu_server_cuda93
+function compile_gpu_1013(){
+mkdir -p build_gpu_server_1013
+cd build_gpu_server_1013
 clean_whl
 cmake -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR_3 \
     -DPYTHON_LIBRARY=$PYTHON_LIBRARY_3 \
@@ -134,21 +121,21 @@ cd ..
 
 function upload_bin(){
     cd bin_package
-    python ../bos_conf/upload.py bin serving-gpu-cuda9-$version.tar.gz
+    python ../bos_conf/upload.py bin serving-gpu-101-$version.tar.gz
     cd ..
 }
 
 function upload_whl(){
     cd whl_package
-    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post9-py2-none-any.whl
-    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post9-py3-none-any.whl
+    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post101-py2-none-any.whl
+    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post101-py3-none-any.whl
     cd ..
 }
 
 function compile(){
     #gpu
-    compile_gpu_cuda9
-    compile_gpu_cuda93
+    compile_gpu_101
+    compile_gpu_1013
 }
 
 #compile
@@ -159,3 +146,4 @@ upload_bin
 
 #upload whl
 upload_whl
+

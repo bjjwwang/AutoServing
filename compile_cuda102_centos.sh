@@ -2,31 +2,39 @@ set -e
 set -v
 export http_proxy=http://172.19.57.45:3128/
 export https_proxy=http://172.19.57.45:3128/
+export http_proxy=http://172.19.56.199:3128
+export https_proxy=http://172.19.56.199:3128
 version=0.0.0
 app_version=0.0.0
-apt install -y libcurl4-openssl-dev
+version=0.5.0
+app_version=0.3.0
+yum install -y bzip2-devel
 cd ./python
 #python change_version.py $version
 cd ..
+rm -rf /usr/local/bin/protoc /usr/local/include/protobuf
+ln -sf /usr/lib64/libcrypto.so.10 /usr/lib64/libcrypto.so
+ln -sf /usr/lib64/libssl.so.10 /usr/lib64/libssl.so
+export LIBRARY_PATH=/usr/lib64:/usr/local/cuda/lib64/stubs
+export LD_LIBRARY_PATH=/opt/_internal/cpython-2.7.15-ucs4/lib/:/opt/_internal/cpython-3.6.0/lib/:/usr/lib64:$LD_LIBRARY_PATH
+export GOROOT=/usr/local/go
+export GOPATH=/root/gopath
+export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/python3.7/lib
-export GOPATH=$HOME/go
-export PATH=$PATH:$GOPATH/bin
-
-cpu_num=10
-
-PYTHONROOT=/usr/local/python2.7.15
+PYTHONROOT=/opt/_internal/cpython-2.7.15-ucs4/
 PYTHON_INCLUDE_DIR_2=$PYTHONROOT/include/python2.7/
 PYTHON_LIBRARY_2=$PYTHONROOT/lib/libpython2.7.so
 PYTHON_EXECUTABLE_2=$PYTHONROOT/bin/python2.7
 
-PYTHONROOT3=/usr/local
+PYTHONROOT3=/opt/_internal/cpython-3.6.0/
 PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.6m/
 PYTHON_LIBRARY_3=$PYTHONROOT3/lib64/libpython3.6m.so
 PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.6m
-/usr/local/python2.7.15/bin/python2.7 -m pip install grpcio==1.33.2 grpcio-tools==1.33.2 numpy bce-python-sdk  pycrypto wheel
-/usr/local/bin/python3.6m -m pip install setuptools -U
-/usr/local/bin/python3.6m -m pip install grpcio grpcio-tools numpy wheel
+$PYTHON_EXECUTABLE_2 -m pip install --upgrade pip
+$PYTHON_EXECUTABLE_2 -m pip install grpcio==1.33.2 grpcio-tools==1.33.2 numpy bce-python-sdk  pycrypto wheel
+$PYTHON_EXECUTABLE_2 -m pip install --upgrade pip
+$PYTHON_EXECUTABLE_3 -m pip install setuptools -U
+$PYTHON_EXECUTABLE_3 -m pip install grpcio grpcio-tools numpy wheel
 
 go env -w GO111MODULE=on
 go env -w GOPROXY=https://goproxy.cn,direct
@@ -35,29 +43,6 @@ go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger@v1.15.2
 go get -u github.com/golang/protobuf/protoc-gen-go@v1.4.3
 go get -u google.golang.org/grpc@v1.33.0
 
-function change_py_version(){
-py3_version=$1
-case $py3_version in
-    35)
-        PYTHONROOT3=/usr/local/python3.5
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.5m
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.5m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.5m
-        ;;
-    36)
-        PYTHONROOT3=/usr/local/python3.6
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.6m/
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.6m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.6m
-        ;;
-    37)
-        PYTHONROOT3=/usr/local/python3.7
-        PYTHON_INCLUDE_DIR_3=$PYTHONROOT3/include/python3.7m/
-        PYTHON_LIBRARY_3=$PYTHONROOT3/lib/libpython3.7m.so
-        PYTHON_EXECUTABLE_3=$PYTHONROOT3/bin/python3.7m
-        ;;
-esac
-}
 #git fetch upstream
 #git merge upstream/develop
 
@@ -65,8 +50,8 @@ git submodule init
 git submodule update
 
 function cp_lib(){
-cp /usr/lib/libcrypto.so.10 $1
-cp /usr/lib/libssl.so.10 $1
+cp /usr/lib64/libcrypto.so.10 $1
+cp /usr/lib64/libssl.so.10 $1
 }
 
 function pack_gpu(){
@@ -77,7 +62,7 @@ mkdir -p serving-gpu-$CUDA_version-$version
 cp ../build_gpu_server_$CUDA_version/output/demo/serving/bin/* serving-gpu-$CUDA_version-$version
 cp ../build_gpu_server_$CUDA_version/third_party/install/Paddle//third_party/install/mklml/lib/* serving-gpu-$CUDA_version-$version
 cp ../build_gpu_server_$CUDA_version/third_party/Paddle/src/extern_paddle/paddle/lib/libpaddle_fluid.so serving-gpu-$CUDA_version-$version
-if [ $1 != 101 ]
+if [ $1 != trt6 ]
 then
 cp ../build_gpu_server_$CUDA_version/third_party/install/Paddle//third_party/install/mkldnn/lib/libdnnl.so.1 serving-gpu-$CUDA_version-$version
 fi
@@ -100,64 +85,57 @@ rm -r python
 fi
 }
 
-function compile_101(){
-mkdir -p build_gpu_server_101
-cd build_gpu_server_101
+function compile_gpu_102(){
+mkdir -p build_gpu_server_102
+cd build_gpu_server_102
 clean_whl
-echo "compile start"
 cmake -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR_2 \
     -DPYTHON_LIBRARY=$PYTHON_LIBRARY_2 \
     -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE_2 \
     -DWITH_GPU=ON \
-    -DSERVER=ON \
-    -DWITH_TRT=ON \
-    -DTENSORRT_ROOT=/usr/ .. 
+    -DSERVER=ON .. > compile_log
 make -j$cpu_num >> compile_log
 make -j$cpu_num >> compile_log
 make install >> compile_log
 cp_whl
 cd ..
-pack_gpu 101
+pack_gpu 102
 }
 
-function compile_101_py3(){
-mkdir -p build_gpu_server_1013
-cd build_gpu_server_1013
+function compile_gpu_1023(){
+mkdir -p build_gpu_server_1023
+cd build_gpu_server_1023
 clean_whl
-export CUDA_PATH='/usr/local'
-export CUDNN_LIBRARY='/usr/local/cuda/lib64/'
-export CUDA_CUDART_LIBRARY="/usr/local/cuda/lib64/"
 cmake -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR_3 \
     -DPYTHON_LIBRARY=$PYTHON_LIBRARY_3 \
     -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE_3 \
     -DWITH_GPU=ON \
-    -DSERVER=ON \
-    -DWITH_TRT=ON \
-    -DTENSORRT_ROOT=/usr .. 
+    -DSERVER=ON .. > compile_log
 make -j$cpu_num >> compile_log
 make -j$cpu_num >> compile_log
 make install >> compile_log
 cp_whl
 cd ..
-pack_gpu 101
+#pack_gpu
 }
 
 function upload_bin(){
     cd bin_package
-    python ../bos_conf/upload.py bin serving-gpu-101-$version.tar.gz
+    python ../bos_conf/upload.py bin serving-gpu-102-$version.tar.gz
     cd ..
 }
 
 function upload_whl(){
     cd whl_package
-    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post101-py2-none-any.whl
-    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post101-py3-none-any.whl
+    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post102-py2-none-any.whl
+    python ../bos_conf/upload.py whl paddle_serving_server_gpu-$version.post102-py3-none-any.whl
     cd ..
 }
 
 function compile(){
-    compile_101
-    compile_101_py3
+    #gpu
+    compile_gpu_102
+    compile_gpu_1023
 }
 
 #compile
@@ -168,3 +146,4 @@ upload_bin
 
 #upload whl
 upload_whl
+
